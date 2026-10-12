@@ -4,6 +4,8 @@ A modern e-mail program for Windows 11 with the look and feel of Outlook Express
 
 <img width="1469" height="884" alt="Screenshot 2026-10-12 172958" src="https://github.com/user-attachments/assets/fe3fb270-67e5-4fa4-b57f-a44801ce6f49" />
 
+<img width="1469" height="884" alt="Screenshot 2026-10-12 173328" src="https://github.com/user-attachments/assets/6084f0dc-9661-4558-8f1f-fedc0b0c9f57" />
+
 <img width="430" height="320" alt="Screenshot 2026-10-12 173030" src="https://github.com/user-attachments/assets/e32e447e-8015-4a7d-a34e-437ea4fc083f" />
 
 ## Run it
