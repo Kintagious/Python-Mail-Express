@@ -1,4 +1,4 @@
-# Express Mail
+# Python Mail Express
 
 A modern e-mail program for Windows 11 with the look and feel of Outlook Express 6 on Windows XP.
 
