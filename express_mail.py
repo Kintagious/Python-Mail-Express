@@ -1,7 +1,26 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+#
+# Python Mail Express - an e-mail program with the look and feel of the Windows XP era.
+# Copyright (C) 2026  Adam Kincaid
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+#
+# The Kincaid Solutions name and logo are not covered by this license.
+#
 """
-Express Mail - a modern-day e-mail client for Windows 11 that looks and feels
+Python Mail Express - a modern-day e-mail client for Windows 11 that looks and feels
 like Outlook Express 6 on Windows XP.
 
   * Real mail: IMAP (receive) + SMTP (send) over SSL/TLS, multiple accounts
@@ -56,7 +75,7 @@ from PySide6.QtGui import (QAction, QBrush, QColor, QDesktopServices, QFont,
                            QFontMetrics, QIcon, QKeySequence, QLinearGradient,
                            QPainter, QPainterPath, QPalette, QPen, QPixmap,
                            QPolygonF, QTextCharFormat, QTextCursor, QTextDocument,
-                           QShortcut, QTextListFormat)
+                           QImage, QShortcut, QTextListFormat)
 from PySide6.QtWidgets import (
     QApplication, QCheckBox, QColorDialog, QComboBox, QCompleter, QDialog,
     QDialogButtonBox, QFileDialog, QFontComboBox, QFormLayout, QFrame,
@@ -123,7 +142,7 @@ if HAVE_WEBENGINE:
             return tmp
 
 APP_NAME = "Python Mail Express"
-VERSION = "1.0"
+VERSION = "1.4"
 APP_DIR = Path(os.environ.get("APPDATA") or (Path.home() / ".config")) / "ExpressMail"
 APP_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -682,6 +701,30 @@ THEMES = {
         edge_rb=["#000000", "#1C1C1C", "#303030", "#303030"],
         edge_inactive=["#3C3C3C", "#7A7A7A", "#5A5A5A", "#5A5A5A"],
         start_band="#1E1E1E", start_band_text="#F59B5A", heading="#D45F10", start_side="#F4F4F4"),
+    "Classic": dict(
+        label="Classic Windows", classic=True, title_h=23,
+        face="#C0C0C0", border="#808080", sep="#808080", menubar_line="#C0C0C0",
+        toolbar=("#C0C0C0", "#C0C0C0", "#C0C0C0"),
+        sel="#000080", sel_text="#FFFFFF", sel_inactive="#C0C0C0",
+        hover_border="#FFFFFF", hover=("#C0C0C0", "#C0C0C0"),
+        down_border="#808080", down=("#C0C0C0", "#C0C0C0"),
+        band=("#808080", "#808080", "#808080"), band_border="#404040",
+        pane=("#C0C0C0", "#C0C0C0"), preview=("#C0C0C0", "#C0C0C0"), list_border="#808080",
+        header=("#C0C0C0", "#C0C0C0", "#C0C0C0"), header_line="#808080", header_hover="#808080",
+        button_border="#000000", button_hover="#000000", button_default="#000000",
+        tab_accent="#C0C0C0", group_title="#000000", group_border="#808080",
+        scroll_track="#DFDFDF", scroll=("#C0C0C0", "#C0C0C0", "#C0C0C0"), scroll_border="#808080",
+        scroll_hover="#C0C0C0", scroll_btn=("#C0C0C0", "#C0C0C0"), arrow="#000000",
+        title_active=[(0, "#000080"), (1, "#1084D0")],
+        title_inactive=[(0, "#808080"), (1, "#C0C0C0")],
+        title_text="#FFFFFF", title_shadow=None, title_text_inactive="#D4D0C8",
+        cap=("#C0C0C0", "#C0C0C0"), cap_hover=("#C0C0C0", "#C0C0C0"), cap_down=("#C0C0C0", "#C0C0C0"),
+        cap_border="#000000", cap_glyph="#000000",
+        close=("#C0C0C0", "#C0C0C0"), close_hover=("#C0C0C0", "#C0C0C0"), close_down=("#C0C0C0", "#C0C0C0"),
+        edge_lt=["#C0C0C0", "#FFFFFF", "#C0C0C0", "#C0C0C0"],
+        edge_rb=["#000000", "#808080", "#C0C0C0", "#C0C0C0"],
+        edge_inactive=["#C0C0C0", "#FFFFFF", "#C0C0C0", "#C0C0C0"],
+        start_band="#000080", start_band_text="#D4D0C8", heading="#000080", start_side="#E8E8E8"),
 }
 THEME_NAME = "Blue"
 THEME = THEMES["Blue"]
@@ -693,10 +736,163 @@ def set_theme(name):
     THEME = THEMES[THEME_NAME]
 
 
+def title_h():
+    """Height of our title bar (XP-style themes are taller than Classic Windows)."""
+    return THEME.get("title_h", 29)
+
+
+def build_classic_stylesheet(r, n):
+    """Windows 98: flat gray, 3D bevels, navy selection, checkered scrollbar tracks."""
+    raised = "border-top: 1px solid #FFFFFF; border-left: 1px solid #FFFFFF; " \
+             "border-bottom: 1px solid #808080; border-right: 1px solid #808080;"
+    sunken = "border-top: 1px solid #808080; border-left: 1px solid #808080; " \
+             "border-bottom: 1px solid #FFFFFF; border-right: 1px solid #FFFFFF;"
+
+    def bevel(name, w=2):          # the exact Windows 98 two-layer edges, drawn by make_classic_bevels()
+        return f"border-image: url({r}/c_{name}.png) {w} {w} {w} {w} stretch stretch; border-width: {w}px;"
+    raised2, pressed2, field2, etched2 = bevel("raised"), bevel("pressed"), bevel("field"), bevel("etched")
+    default3, default_pressed3 = bevel("default", 3), bevel("default_pressed", 3)
+    thin1 = bevel("thin", 1)
+    tab = f"border-image: url({r}/c_tab.png) 2 2 0 2 stretch stretch; border-width: 2px 2px 0px 2px;"
+    return f"""
+QMainWindow, QDialog {{ background: #C0C0C0; }}
+QWidget {{ color: #000000; }}
+#composeHead {{ background: #C0C0C0; }}
+QMenuBar {{ background: #C0C0C0; border: none; }}
+QMenuBar::item {{ padding: 2px 7px; background: transparent; }}
+QMenuBar::item:selected {{ background: #000080; color: #FFFFFF; }}
+QMenu {{ background: #C0C0C0; {raised2} padding: 1px; }}
+QMenu::item {{ padding: 3px 26px 3px 24px; }}
+QMenu::item:selected {{ background: #000080; color: #FFFFFF; }}
+QMenu::item:disabled {{ color: #808080; }}
+QMenu::separator {{ height: 0px; border-top: 1px solid #808080; border-bottom: 1px solid #FFFFFF; margin: 3px 2px; }}
+
+QToolBar {{ background: #C0C0C0; border: none; {raised} spacing: 1px; padding: 1px 3px 2px 3px; }}
+QToolBar::separator {{ width: 0px; border-left: 1px solid #808080; border-right: 1px solid #FFFFFF; margin: 3px 3px; }}
+QToolBar QToolButton {{ border: 1px solid transparent; padding: 2px 5px; background: transparent; }}
+QToolBar[big="true"] QToolButton {{ min-width: 50px; min-height: 42px; }}
+QToolBar QToolButton:hover {{ {raised} }}
+QToolBar QToolButton:pressed, QToolBar QToolButton:checked {{ {sunken} }}
+QToolBar QToolButton:disabled {{ color: #808080; }}
+QToolButton::menu-indicator {{ subcontrol-position: right center; }}
+QToolBar QToolButton::menu-button {{ border: none; background: transparent; width: 12px; }}
+QToolBar QToolButton::menu-button:hover, QToolBar QToolButton::menu-button:pressed,
+QToolBar QToolButton::menu-button:open {{ border: none; background: transparent; }}
+
+#folderBand {{ background: #808080; border: none; {sunken} }}
+#folderBand QLabel {{ color: #FFFFFF; background: transparent; }}
+#bandTitle {{ font-size: 12pt; font-weight: bold; }}
+
+#paneHeader {{ background: #C0C0C0; {raised} }}
+#paneHeader QToolButton {{ border: 1px solid transparent; padding: 0px 3px; background: transparent; }}
+#paneHeader QToolButton:hover {{ {raised} }}
+
+QTreeWidget, QListWidget, QTableWidget, QTextBrowser, QTextEdit, QLineEdit, QSpinBox, QComboBox {{
+    background: #FFFFFF; {field2}
+    selection-background-color: #000080; selection-color: #FFFFFF; }}
+QTreeWidget::item:selected, QListWidget::item:selected, QTableWidget::item:selected {{
+    background: #000080; color: #FFFFFF; }}
+QTreeWidget::item:selected:!active, QListWidget::item:selected:!active {{ background: #C0C0C0; color: #000000; }}
+QHeaderView::section {{ background: #C0C0C0; {raised2} padding: 1px 4px; }}
+QHeaderView::section:pressed {{ {pressed2} }}
+QComboBox {{ padding: 1px 4px; }}
+QComboBox::drop-down {{ subcontrol-origin: padding; subcontrol-position: top right; width: 16px; {raised2} }}
+QComboBox::drop-down:on {{ {pressed2} }}
+QComboBox::down-arrow {{ image: url({r}/arr_down_{n}.png); width: 8px; height: 8px; }}
+
+#previewHeader {{ background: #C0C0C0; {thin1} }}
+#previewHeader QLabel {{ background: transparent; }}
+
+QStatusBar {{ background: #C0C0C0; border: none; }}
+QStatusBar::item {{ {sunken} margin: 1px 2px; }}
+QStatusBar QLabel {{ padding: 0px 6px; }}
+
+QSplitter::handle {{ background: #C0C0C0; }}
+QSplitter::handle:horizontal {{ width: 4px; }}
+QSplitter::handle:vertical {{ height: 4px; }}
+
+QPushButton {{ background: #C0C0C0; {raised2} padding: 3px 12px; min-width: 60px; min-height: 15px; }}
+QPushButton:pressed {{ {pressed2} padding: 4px 11px 2px 13px; }}
+QPushButton:default {{ {default3} padding: 2px 11px; }}
+QPushButton:default:pressed {{ {default_pressed3} padding: 3px 10px 1px 12px; }}
+QPushButton:disabled {{ color: #808080; }}
+#addrButton {{ min-width: 46px; padding: 2px 6px; }}
+
+QTabWidget::pane {{ {raised2} background: #C0C0C0; top: -2px; }}
+QTabWidget::tab-bar {{ left: 2px; }}
+QTabBar::tab {{ background: transparent; {tab} padding: 2px 8px 3px 8px; margin: 2px 0px 0px 0px; }}
+QTabBar::tab:selected {{ padding: 3px 10px 5px 10px; margin: 0px -2px -2px -2px; }}
+QTabBar::tab:first:selected {{ margin-left: 0px; }}
+QGroupBox {{ {etched2} margin-top: 10px; padding-top: 6px; }}
+QGroupBox::title {{ subcontrol-origin: margin; left: 8px; color: #000000; padding: 0 3px; }}
+QProgressBar {{ {thin1} background: #C0C0C0; height: 14px; text-align: center; }}
+QProgressBar::chunk {{ background: #000080; width: 8px; margin: 1px; }}
+
+QScrollBar:vertical {{ background: url({r}/checker.png); width: 16px; margin: 16px 0 16px 0; border: none; }}
+QScrollBar:horizontal {{ background: url({r}/checker.png); height: 16px; margin: 0 16px 0 16px; border: none; }}
+QScrollBar::handle {{ background: #C0C0C0; {raised2} }}
+QScrollBar::handle:vertical {{ min-height: 20px; }}
+QScrollBar::handle:horizontal {{ min-width: 20px; }}
+QScrollBar::add-line, QScrollBar::sub-line {{ background: #C0C0C0; {raised2} }}
+QScrollBar::add-line:pressed, QScrollBar::sub-line:pressed {{ {thin1} }}
+QScrollBar::add-line:vertical {{ subcontrol-origin: margin; subcontrol-position: bottom; height: 16px; }}
+QScrollBar::sub-line:vertical {{ subcontrol-origin: margin; subcontrol-position: top; height: 16px; }}
+QScrollBar::add-line:horizontal {{ subcontrol-origin: margin; subcontrol-position: right; width: 16px; }}
+QScrollBar::sub-line:horizontal {{ subcontrol-origin: margin; subcontrol-position: left; width: 16px; }}
+QScrollBar::up-arrow {{ image: url({r}/arr_up_{n}.png); width: 8px; height: 8px; }}
+QScrollBar::down-arrow {{ image: url({r}/arr_down_{n}.png); width: 8px; height: 8px; }}
+QScrollBar::left-arrow {{ image: url({r}/arr_left_{n}.png); width: 8px; height: 8px; }}
+QScrollBar::right-arrow {{ image: url({r}/arr_right_{n}.png); width: 8px; height: 8px; }}
+QScrollBar::add-page, QScrollBar::sub-page {{ background: none; }}
+"""
+
+
+def _bevel_image(path, rings, center, tab=False):
+    """A tiny image of nested 3D edges. rings = [(top/left color, bottom/right color), ...] outside in."""
+    k = len(rings)
+    n = 2 * k + 2
+    img = QImage(n, n, QImage.Format_ARGB32)
+    img.fill(QColor(center) if center else QColor(0, 0, 0, 0))
+    p = QPainter(img)
+    for i, (tl, br) in enumerate(rings):
+        p.fillRect(i, i, n - 2 * i, 1, QColor(tl))
+        p.fillRect(i, i, 1, n - 2 * i, QColor(tl))
+        p.fillRect(i, n - 1 - i, n - 2 * i, 1, QColor(br))
+        p.fillRect(n - 1 - i, i, 1, n - 2 * i, QColor(br))
+    p.end()
+    if tab:      # tabs: no bottom edge (the page continues below), clipped top corners
+        for y in range(n - k, n):
+            for x in range(n):
+                if k <= x < n - k:
+                    img.setPixelColor(x, y, QColor(center))
+                elif x < k:
+                    img.setPixelColor(x, y, QColor(rings[x][0]))
+                else:
+                    img.setPixelColor(x, y, QColor(rings[n - 1 - x][1]))
+        img.setPixelColor(0, 0, QColor(0, 0, 0, 0))
+        img.setPixelColor(n - 1, 0, QColor(0, 0, 0, 0))
+    img.save(str(path))
+
+
+def make_classic_bevels(res):
+    """Windows 98 edges: buttons, the default button, tabs, sunken fields, etched frames."""
+    W, L, G, D, B, F = "#FFFFFF", "#DFDFDF", "#C0C0C0", "#808080", "#000000", "#C0C0C0"
+    _bevel_image(res / "c_raised.png", [(W, B), (L, D)], F)
+    _bevel_image(res / "c_pressed.png", [(B, W), (D, L)], F)
+    _bevel_image(res / "c_default.png", [(B, B), (W, B), (L, D)], F)
+    _bevel_image(res / "c_default_pressed.png", [(B, B), (D, D), (G, G)], F)
+    _bevel_image(res / "c_field.png", [(D, W), (B, L)], "#FFFFFF")
+    _bevel_image(res / "c_etched.png", [(D, W), (W, D)], F)
+    _bevel_image(res / "c_thin.png", [(D, W)], F)
+    _bevel_image(res / "c_tab.png", [(W, B), (L, D)], F, tab=True)
+
+
 def build_stylesheet(res_dir):
     r = res_dir.as_posix()
     T = THEME
     n = THEME_NAME
+    if T.get("classic"):
+        return build_classic_stylesheet(r, n)
     return f"""
 QMainWindow, QDialog {{ background: {T['face']}; }}
 QWidget {{ color: #000000; }}
@@ -715,12 +911,16 @@ QToolBar {{ background: qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 {T['toolbar'
            border: none; border-bottom: 1px solid {T['border']}; spacing: 1px; padding: 2px 3px; }}
 QToolBar::separator {{ width: 1px; background: {T['sep']}; margin: 4px 4px; }}
 QToolBar QToolButton {{ border: 1px solid transparent; border-radius: 3px; padding: 2px 5px; background: transparent; }}
+QToolBar[big="true"] QToolButton {{ min-width: 50px; min-height: 42px; }}
 QToolBar QToolButton:hover {{ border: 1px solid {T['hover_border']};
            background: qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 {T['hover'][0]}, stop:1 {T['hover'][1]}); }}
 QToolBar QToolButton:pressed, QToolBar QToolButton:checked {{ border: 1px solid {T['down_border']};
            background: qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 {T['down'][0]}, stop:1 {T['down'][1]}); }}
 QToolBar QToolButton:disabled {{ color: {T['border']}; }}
 QToolButton::menu-indicator {{ subcontrol-position: right center; }}
+QToolBar QToolButton::menu-button {{ border: none; background: transparent; width: 12px; }}
+QToolBar QToolButton::menu-button:hover, QToolBar QToolButton::menu-button:pressed,
+QToolBar QToolButton::menu-button:open {{ border: none; background: transparent; }}
 
 #folderBand {{ background: qlineargradient(x1:0,y1:0,x2:1,y2:0, stop:0 {T['band'][0]}, stop:0.55 {T['band'][1]}, stop:1 {T['band'][2]});
               border-bottom: 1px solid {T['band_border']}; }}
@@ -804,6 +1004,16 @@ def apply_xp_theme(app):
         path = res / f"{name}_{THEME_NAME}.png"
         if not path.exists():
             make_pixmap(name, 18).save(str(path))
+    make_classic_bevels(res)
+    checker = res / "checker.png"
+    if not checker.exists():
+        img = QPixmap(2, 2)
+        img.fill(QColor("#C0C0C0"))
+        cp = QPainter(img)
+        cp.fillRect(0, 0, 1, 1, QColor("#FFFFFF"))
+        cp.fillRect(1, 1, 1, 1, QColor("#FFFFFF"))
+        cp.end()
+        img.save(str(checker))
     app.setStyle(QStyleFactory.create("Fusion"))
     pal = QPalette()
     pal.setColor(QPalette.Window, QColor(T["face"]))
@@ -819,8 +1029,12 @@ def apply_xp_theme(app):
     pal.setColor(QPalette.ToolTipText, QColor("#000000"))
     pal.setColor(QPalette.Link, QColor("#0000FF"))
     app.setPalette(pal)
-    app.setFont(QFont("Tahoma", 8))
+    app.setFont(QFont("Microsoft Sans Serif", 8) if T.get("classic") else QFont("Tahoma", 8))
     app.setStyleSheet(build_stylesheet(res))
+    for w in app.topLevelWidgets():                 # title bar heights differ between styles
+        chrome = getattr(w, "_xp_chrome", None)
+        if chrome is not None:
+            chrome.restyle()
     for w in app.allWidgets():
         w.update()
 
@@ -848,7 +1062,7 @@ def xp_titlebar(widget):
             return c.red() | (c.green() << 8) | (c.blue() << 16)
 
         T = THEME
-        for attr, val in ((35, cref(T["title_active"][2][1])), (36, cref(T["title_text"])),
+        for attr, val in ((35, cref(T["title_active"][len(T["title_active"]) // 2][1])), (36, cref(T["title_text"])),
                           (34, cref(T["edge_lt"][0]))):
             v = ctypes.c_int(val)
             ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, attr, ctypes.byref(v), ctypes.sizeof(v))
@@ -865,6 +1079,43 @@ TITLE_H = 29
 EDGE = 4
 
 # colors come from THEME (see the color schemes above)
+
+
+def draw_classic_caption(p, kind, w=16, h=14, down=False):
+    """Windows 98 caption button: gray, 3D bevel, black symbol."""
+    p.fillRect(0, 0, w, h, QColor("#C0C0C0"))
+    o1, o2, i1, i2 = (("#000000", "#FFFFFF", "#808080", "#DFDFDF") if down
+                      else ("#FFFFFF", "#000000", "#DFDFDF", "#808080"))
+    p.fillRect(0, 0, w, 1, QColor(o1))
+    p.fillRect(0, 0, 1, h, QColor(o1))
+    p.fillRect(0, h - 1, w, 1, QColor(o2))
+    p.fillRect(w - 1, 0, 1, h, QColor(o2))
+    p.fillRect(1, 1, w - 2, 1, QColor(i1))
+    p.fillRect(1, 1, 1, h - 2, QColor(i1))
+    p.fillRect(1, h - 2, w - 2, 1, QColor(i2))
+    p.fillRect(w - 2, 1, 1, h - 2, QColor(i2))
+    d = 1 if down else 0
+    black = QColor("#000000")
+    if kind == "min":
+        p.fillRect(4 + d, 9 + d, 6, 2, black)
+    elif kind == "max":
+        p.setPen(black)
+        p.setBrush(Qt.NoBrush)
+        p.drawRect(3 + d, 2 + d, 8, 8)
+        p.fillRect(3 + d, 2 + d, 9, 2, black)
+    elif kind == "restore":
+        p.setPen(black)
+        p.setBrush(Qt.NoBrush)
+        p.drawRect(5 + d, 1 + d, 5, 5)
+        p.fillRect(5 + d, 1 + d, 6, 2, black)
+        p.fillRect(2 + d, 4 + d, 6, 6, QColor("#C0C0C0"))
+        p.drawRect(2 + d, 4 + d, 5, 5)
+        p.fillRect(2 + d, 4 + d, 6, 2, black)
+    else:
+        p.setPen(black)
+        for k in (0, 1):
+            p.drawLine(4 + d + k, 3 + d, 10 + d + k, 9 + d)
+            p.drawLine(10 + d + k, 3 + d, 4 + d + k, 9 + d)
 
 
 class XPCaptionButton(QAbstractButton):
@@ -892,8 +1143,14 @@ class XPCaptionButton(QAbstractButton):
         self.update()
         super().leaveEvent(ev)
 
+    def _paint_classic(self, p):
+        draw_classic_caption(p, self.kind, self.width(), self.height(), self.isDown())
+
     def paintEvent(self, ev):
         p = QPainter(self)
+        if THEME.get("classic"):
+            self._paint_classic(p)
+            return
         p.setRenderHint(QPainter.Antialiasing)
         hover, down = self.underMouse(), self.isDown()
         if not self.window().isActiveWindow() and not hover:
@@ -944,18 +1201,57 @@ class XPTitleBar(QWidget):
         self.btn_min.setVisible(chrome.full)
         self.btn_max.setVisible(chrome.full)
 
-    def resizeEvent(self, ev):
-        x = self.width() - 5 - 21
-        self.btn_close.move(x, 4)
-        for b in (self.btn_max, self.btn_min):
+    def relayout(self):
+        classic = THEME.get("classic")
+        bw, bh = (16, 14) if classic else (21, 21)
+        for b in (self.btn_min, self.btn_max, self.btn_close):
+            b.setFixedSize(bw, bh)
+        y = 6 if classic else 4
+        x = self.width() - (6 if classic else 5) - bw
+        self.btn_close.move(x, y)
+        gaps = (bw + 2, bw) if classic else (23, 23)     # Win98: gap before close, none between
+        for b, gap in zip((self.btn_max, self.btn_min), gaps):
             if b.isVisibleTo(self):
-                x -= 23
-                b.move(x, 4)
+                x -= gap
+                b.move(x, y)
         self.text_right = x - 6
+
+    def resizeEvent(self, ev):
+        self.relayout()
+
+    def _paint_classic(self, p, active):
+        T = THEME
+        w, h = self.width(), self.height()
+        p.fillRect(self.rect(), QColor(T["face"]))
+        e = 0 if self.chrome.maxed else EDGE
+        for i in range(e):                       # the 3D window frame around the caption
+            p.fillRect(i, i, w - 2 * i, 1, QColor(T["edge_lt"][i]))
+            p.fillRect(i, i, 1, h - i, QColor(T["edge_lt"][i]))
+            p.fillRect(w - 1 - i, i, 1, h - i, QColor(T["edge_rb"][i]))
+        bar = QRect(e, e, w - 2 * e, 18)
+        g = QLinearGradient(bar.left(), 0, bar.right(), 0)
+        for pos, col in (T["title_active"] if active else T["title_inactive"]):
+            g.setColorAt(pos, QColor(col))
+        p.fillRect(bar, QBrush(g))
+        ic = self.win.windowIcon()
+        if not ic.isNull():
+            ic.paint(p, QRect(bar.left() + 2, bar.top() + 1, 16, 16))
+        f = QFont("Microsoft Sans Serif")
+        f.setBold(True)
+        f.setPixelSize(11)
+        p.setFont(f)
+        right = getattr(self, "text_right", w - 60)
+        rect = QRect(bar.left() + 21, bar.top(), max(0, right - bar.left() - 21), bar.height())
+        text = QFontMetrics(f).elidedText(self.win.windowTitle(), Qt.ElideRight, rect.width())
+        p.setPen(QColor(T["title_text"] if active else T["title_text_inactive"]))
+        p.drawText(rect, Qt.AlignVCenter | Qt.AlignLeft, text)
 
     def paintEvent(self, ev):
         p = QPainter(self)
         active = self.win.isActiveWindow()
+        if THEME.get("classic"):
+            self._paint_classic(p, active)
+            return
         g = QLinearGradient(0, 0, 0, self.height())
         T = THEME
         for pos, col in (T["title_active"] if active else T["title_inactive"]):
@@ -971,7 +1267,7 @@ class XPTitleBar(QWidget):
         right = getattr(self, "text_right", self.width() - 80)
         rect = QRect(28, 0, max(0, right - 28), self.height())
         text = QFontMetrics(f).elidedText(self.win.windowTitle(), Qt.ElideRight, rect.width())
-        if active:
+        if active and T.get("title_shadow"):
             p.setPen(QColor(T["title_shadow"]))
             p.drawText(rect.translated(1, 1), Qt.AlignVCenter | Qt.AlignLeft, text)
         p.setPen(QColor(T["title_text"] if active else T["title_text_inactive"]))
@@ -1065,7 +1361,7 @@ class XPEdge(QWidget):
 
     def paintEvent(self, ev):
         p = QPainter(self)
-        active = self.chrome.win.isActiveWindow()
+        active = self.chrome.win.isActiveWindow() or THEME.get("classic")
         w, h = self.width(), self.height()
         if self.side == "l":
             cols = THEME["edge_lt"] if active else THEME["edge_inactive"]
@@ -1104,7 +1400,7 @@ class XPChrome(QObject):
 
     def apply_margins(self):
         e = 0 if self.maxed else EDGE
-        self.win.setContentsMargins(e, TITLE_H, e, e)
+        self.win.setContentsMargins(e, title_h(), e, e)
         for x in self.edges:
             x.setVisible(not self.maxed)
         self.title.btn_max.set_kind("restore" if self.maxed else "max")
@@ -1112,14 +1408,24 @@ class XPChrome(QObject):
 
     def place(self):
         w, h = self.win.width(), self.win.height()
-        self.title.setGeometry(0, 0, w, TITLE_H)
+        self.title.setGeometry(0, 0, w, title_h())
         self.title.raise_()
         left, right, bottom = self.edges
-        left.setGeometry(0, TITLE_H, EDGE, h - TITLE_H)
-        right.setGeometry(w - EDGE, TITLE_H, EDGE, h - TITLE_H)
+        left.setGeometry(0, title_h(), EDGE, h - title_h())
+        right.setGeometry(w - EDGE, title_h(), EDGE, h - title_h())
         bottom.setGeometry(0, h - EDGE, w, EDGE)
         for x in self.edges:
             x.raise_()
+
+    def restyle(self):
+        """Called when the color scheme changes (Classic Windows has a shorter title bar)."""
+        self.apply_margins()
+        self.title.relayout()
+        self.title.update()
+        if self._shown:
+            self._native_tweaks()
+        for e in self.edges:
+            e.update()
 
     def toggle_max(self):
         if not self.full:
@@ -1158,7 +1464,7 @@ class XPChrome(QObject):
             if self.full:     # lets a click on the taskbar button minimize/restore the window
                 style = u32.GetWindowLongW(hwnd, -16)
                 u32.SetWindowLongW(hwnd, -16, style | 0x00020000)
-            v = ctypes.c_int(3)  # DWMWCP_ROUNDSMALL: softly rounded corners
+            v = ctypes.c_int(1 if THEME.get("classic") else 3)  # square for Classic, else softly rounded
             ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, 33, ctypes.byref(v), ctypes.sizeof(v))
         except Exception:
             pass
@@ -2806,6 +3112,31 @@ def theme_preview(name, w=230, h=30):
     pm = QPixmap(w, h)
     pm.fill(QColor(T["face"]))
     p = QPainter(pm)
+    if T.get("classic"):
+        for i in range(3):
+            p.fillRect(i, i, w - 2 * i, 1, QColor(T["edge_lt"][i]))
+            p.fillRect(i, i, 1, h - i, QColor(T["edge_lt"][i]))
+            p.fillRect(w - 1 - i, i, 1, h - i, QColor(T["edge_rb"][i]))
+        g = QLinearGradient(3, 0, w - 3, 0)
+        for pos, col in T["title_active"]:
+            g.setColorAt(pos, QColor(col))
+        p.fillRect(3, 3, w - 6, 18, QBrush(g))
+        icon("app").paint(p, QRect(5, 4, 16, 16))
+        f = QFont("Microsoft Sans Serif")
+        f.setBold(True)
+        f.setPixelSize(11)
+        p.setFont(f)
+        p.setPen(QColor(T["title_text"]))
+        p.drawText(QRect(24, 3, 130, 18), Qt.AlignVCenter, APP_NAME)
+        x = w - 5 - 16
+        for kind, gap in (("close", 18), ("max", 16), ("min", 0)):
+            p.save()
+            p.translate(x, 5)
+            draw_classic_caption(p, kind)
+            p.restore()
+            x -= gap
+        p.end()
+        return pm
     p.setRenderHint(QPainter.Antialiasing)
     g = QLinearGradient(0, 0, 0, 24)
     for pos, col in T["title_active"]:
@@ -3005,6 +3336,7 @@ class AddressBook(QMainWindow):
         tb = QToolBar()
         tb.setMovable(False)
         tb.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
+        tb.setProperty("big", True)          # same button size in every color scheme
         tb.setIconSize(QSize(24, 24))
         self.addToolBar(tb)
         for text, ic, slot in (("New", "contact", self.new), ("Properties", "drafts", self.edit),
@@ -3225,6 +3557,7 @@ class ComposeWindow(QMainWindow):
         tb = QToolBar("Standard")
         tb.setMovable(False)
         tb.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
+        tb.setProperty("big", True)          # same button size in every color scheme
         tb.setIconSize(QSize(24, 24))
         self.addToolBar(tb)
         self.a_send = self._act("&Send Message", "send", self.send, "Alt+S", "Send")
@@ -3536,6 +3869,7 @@ class MessageWindow(QMainWindow):
         tb = QToolBar()
         tb.setMovable(False)
         tb.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
+        tb.setProperty("big", True)          # same button size in every color scheme
         tb.setIconSize(QSize(24, 24))
         self.addToolBar(tb)
         for text, ic, slot in (("Reply", "reply", lambda: main.reply("reply", self.mid)),
@@ -3729,6 +4063,7 @@ class MainWindow(QMainWindow):
         tb.setObjectName("mainToolbar")
         tb.setMovable(False)
         tb.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
+        tb.setProperty("big", True)          # same button size in every color scheme
         tb.setIconSize(QSize(24, 24))
         self.addToolBar(tb)
         self.toolbar = tb
@@ -4701,9 +5036,13 @@ class AboutDialog(QDialog):
             "IMAP / SMTP · Local Folders · Address Book</p>"
             "<p><b>Developed By:</b>&nbsp; Adam Kincaid</p>"
             "<p>Disclaimer: This project was coded using Claude</p>"
+            "<p>Copyright &copy; 2026 Adam Kincaid<br>"
+            "Free software under the <a href='https://www.gnu.org/licenses/gpl-3.0.html'>GNU General "
+            "Public License, version 3 or later</a>. This program comes with ABSOLUTELY NO WARRANTY.</p>"
             f"<p style='color:#555555'>Your mail is stored in:<br>{html.escape(str(APP_DIR))}</p>")
         text.setWordWrap(True)
-        text.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        text.setTextInteractionFlags(Qt.TextBrowserInteraction)
+        text.setOpenExternalLinks(True)
         b.addWidget(text, 1)
         v.addWidget(body)
 
